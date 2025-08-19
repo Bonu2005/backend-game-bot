@@ -21,13 +21,13 @@ async function bootstrap() {
 
         console.log(`Игрок: ${username} (${telegramId})`);
 
-    
+
         await bot.answerCallbackQuery(query.id, {
           url: `https://game-bot-gules.vercel.app/?telegramId=${telegramId}&username=${encodeURIComponent(username)}`,
         });
-console.log(`https://game-bot-gules.vercel.app/?telegramId=${telegramId}&username=${encodeURIComponent(username)}`,);
+        console.log(`https://game-bot-gules.vercel.app/?telegramId=${telegramId}&username=${encodeURIComponent(username)}`,);
 
-     
+
       }
     } catch (err) {
       console.error("Ошибка при обработке callback_query:", err);
