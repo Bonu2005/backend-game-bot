@@ -14,7 +14,7 @@
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:dev": "npx prisma migrate dev &&  npx prisma generate && nest start --watch",
+    "start:dev": "npx prisma migrate dev && npx prisma generate && nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "npx prisma migrate dev && npx prisma generate && nest start --watch",
     "start:render": "yarn prisma:generate && yarn prisma:migrate:deploy && yarn build && yarn start:prod",
