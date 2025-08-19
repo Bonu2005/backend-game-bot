@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Words {
+  id           String   @id @default(uuid())
+  word_en      String
+  correct_uz   String
+  wrong_1      String
+  wrong_2      String
+  wrong_3      String
+  level        Int
+  answers      Answer[]
+}
+
+model Users {
+  id           String   @id @default(uuid())
+  telegramId   String   @unique
+  username     String
+  score        Int      @default(0)   // общий счет
+  sessions     Game_Session[]
+}
+
+model Game_Session {
+  id         String    @id @default(uuid())
+  userId     String
+  user       Users     @relation(fields: [userId], references: [id])
+  level      Int?       
+  score      Int       @default(0)
+  duration   Int       @default(50)   // всегда 50 секунд
+  start_time DateTime  @default(now())
+  end_time   DateTime?
+  answers    Answer[]
+}
+
+model Answer {
+  id             String       @id @default(uuid())
+  sessionId      String
+  session        Game_Session @relation(fields: [sessionId], references: [id])
+  wordId         String
+  word           Words        @relation(fields: [wordId], references: [id])
+  selectedOption String
+  isCorrect      Boolean
+  time_taken     Int
+  @@unique([sessionId, wordId])
+}
