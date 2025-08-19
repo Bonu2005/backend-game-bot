@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: nest-app
+    env: node
+    plan: free
+    region: frankfurt
+    branch: main
+    buildCommand: yarn install && yarn build
+    startCommand: node dist/main.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20
