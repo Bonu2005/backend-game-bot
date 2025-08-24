@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Body,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { GameService } from './game.service';
 import { StartGameDto, SubmitAnswerDto } from './dto/create-game.dto';
 
@@ -12,42 +6,39 @@ import { StartGameDto, SubmitAnswerDto } from './dto/create-game.dto';
 export class GameController {
   constructor(private readonly gameService: GameService) {}
 
-  // ▶️ старт игры (создание сессии, пока без уровня)
   @Post('start')
-  async startGame(@Body() dto: StartGameDto) {
-    return this.gameService.startGame(dto);
+  start(@Body() dto: StartGameDto, @Query('chatId') chatId?: string) {
+    return this.gameService.startGame(dto, chatId || undefined);
   }
 
-  // 🎯 выбор уровня
   @Post('choose-level')
-  async chooseLevel(
-    @Query('session_id') sessionId: string,
-    @Body('level') level: number,
-  ) {
-    return this.gameService.chooseLevel(sessionId, level);
+  chooseLevel(@Query('sessionId') sessionId: string, @Query('level') level: string) {
+    return this.gameService.chooseLevel(sessionId, Number(level));
   }
 
-  // 🔤 получить следующее слово
   @Get('next-word')
-  async getNextWord(@Query('session_id') sessionId: string) {
+  getNext(@Query('sessionId') sessionId: string) {
     return this.gameService.getNextWord(sessionId);
   }
 
-  // ✅ отправить ответ
-  @Post('submit-answer')
-  async submitAnswer(@Body() dto: SubmitAnswerDto) {
+  @Post('submit')
+  submit(@Body() dto: SubmitAnswerDto) {
     return this.gameService.submitAnswer(dto);
   }
 
-  // 📊 результат игры
   @Get('result')
-  async getResult(@Query('session_id') sessionId: string) {
+  result(@Query('sessionId') sessionId: string) {
     return this.gameService.getResult(sessionId);
   }
 
-  // 🏆 лидерборд
-  @Get('leaderboard')
-  async getLeaderboard(@Query('level') level?: number) {
-    return this.gameService.getLeaderboard(level);
+  // Лидерборды
+  @Get('leaderboard/global')
+  globalLb() {
+    return this.gameService.getGlobalLeaderboard();
+  }
+
+  @Get('leaderboard/chat')
+  chatLb(@Query('chatId') chatId: string) {
+    return this.gameService.getChatLeaderboard(chatId);
   }
 }
