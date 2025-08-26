@@ -42,6 +42,21 @@ export class GameController {
       inline_messageId,
     });
   }
+  @Get('highscore')
+  highscore(
+  
+    @Query('userId') userId: string,
+    @Query('chatId') chatId?: string,
+    @Query('messageId') messageId?: string,
+    @Query('inline_messageId') inline_messageId?: string,
+  ) {
+    return this.gameService.getHighScores({
+      userId,
+      chatId,
+      messageId,
+      inline_messageId,
+    });
+  }
 
 
 

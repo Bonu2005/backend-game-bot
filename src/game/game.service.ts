@@ -277,6 +277,27 @@ export class GameService {
     }
   }
 
+  async getHighScores(query: {
+    userId: string;
+    chatId?: string;
+    messageId?: string;
+    inline_messageId?: string;
+  }) {
+    const tgURL = new URL(`https://api.telegram.org/bot${process.env.TG_BOT_TOKEN}/getGameHighScores`);
+    tgURL.searchParams.set('user_id', String(query.userId));
+
+    if (query.inline_messageId) {
+      tgURL.searchParams.set('inline_message_id', query.inline_messageId);
+    } else if (query.chatId && query.messageId) {
+      tgURL.searchParams.set('chat_id', String(query.chatId));
+      tgURL.searchParams.set('message_id', String(query.messageId));
+    } else {
+      throw new BadRequestException('Need message identifiers');
+    }
+
+    const resp = await fetch(tgURL.toString()).then(r => r.json());
+    return resp;
+  }
 
   private shuffle(arr: string[]) {
     for (let i = arr.length - 1; i > 0; i--) {
