@@ -27,28 +27,17 @@ export class GameController {
   }
 
   @Post('result')
-  result(
-    @Query('score') score: number,
-    @Query('userId') userId: string,
-    @Query('chatId') chatId?: string,
-    @Query('messageId') messageId?: string,
-    @Query('inline_messageId') inline_messageId?: string,
-  ) {
-    return this.gameService.getResult({
-      score: score,
-      userId,
-      chatId,
-      messageId,
-      inline_messageId,
-    });
+  result(@Body() body: { score: number; userId: string; chatId?: string; messageId?: string; inline_messageId?: string }) {
+    return this.gameService.getResult(body);
   }
-  
+
+
   @Get('top')
   getTopPlayers() {
     return this.gameService.getTopPlayers();
   }
 
-  @Get('result/:sessionId')
+  @Get('by/:sessionId')
   async getResult(@Param('sessionId') sessionId: string) {
     return this.gameService.getBy(sessionId);
   }
