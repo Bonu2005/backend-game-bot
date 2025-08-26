@@ -226,9 +226,9 @@ export class GameService {
 
   async getResult(body: {
     score: number;
-    user_id: number;
-    chat_id?: number;
-    message_id?: number;
+    user_id: string;
+    chat_id?: string;
+    message_id?: string;
     inline_message_id?: string;
   }) {
     try {
