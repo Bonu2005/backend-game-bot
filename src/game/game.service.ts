@@ -238,7 +238,24 @@ export class GameService {
         throw new BadRequestException('Invalid score or userId');
       }
 
-      // если есть чат — сохраняем лучший результат
+      // Находим пользователя
+      const user = await this.prisma.users.findUnique({ where: { telegramId: String(userId) } });
+      if (!user) throw new BadRequestException('User not found');
+
+      // Проверка — побил ли рекорд
+      const isNewRecord = score > (user.score ?? 0);
+
+      if (!isNewRecord) {
+        return { ok: true, message: 'Score not higher than personal best — not updated' };
+      }
+
+      // Обновляем рекорд
+      await this.prisma.users.update({
+        where: { telegramId: String(userId) },
+        data: { score, bestLevel: user.bestLevel ?? null },
+      });
+
+      // Если игра была в чате — обновляем рекорд в таблице chatBest
       if (chatId) {
         const existing = await this.prisma.chatBest.findFirst({
           where: { chatId: String(chatId), userId: String(userId) },
@@ -253,12 +270,12 @@ export class GameService {
         }
       }
 
-      // отправляем результат в Telegram API
-      const tgURL = new URL(`https://api.telegram.org/bot8368067329:AAGAUAGj6ZrJ9sQnxvUzeIS2OcFZDmMI7_U/setGameScore`);
+      // Отправляем результат в Telegram API только если побил рекорд
+      const tgURL = new URL(
+        `https://api.telegram.org/bot${process.env.TG_BOT_TOKEN}/setGameScore`,
+      );
       tgURL.searchParams.set('user_id', String(userId));
       tgURL.searchParams.set('score', String(score));
-
-
 
       if (inline_messageId) {
         tgURL.searchParams.set('inline_message_id', inline_messageId);
@@ -270,34 +287,27 @@ export class GameService {
       }
 
       const tgResp = await fetch(tgURL.toString()).then((r) => r.json());
-      return { ok: true, tg: tgResp };
+      return { ok: true, newRecord: true, tg: tgResp };
     } catch (e) {
       console.error(e);
       throw new BadRequestException('Server error');
     }
   }
 
-  async getHighScores(query: {
-    userId: string;
-    chatId?: string;
-    messageId?: string;
-    inline_messageId?: string;
-  }) {
-    const tgURL = new URL(`https://api.telegram.org/bot${process.env.TG_BOT_TOKEN}/getGameHighScores`);
-    tgURL.searchParams.set('user_id', String(query.userId));
+  async getTopPlayers() {
+    const topPlayers = await this.prisma.users.findMany({
+      orderBy: { score: 'desc' },
+      take: 5,
+      select: {
+        username: true,
+        score: true,
+        bestLevel: true,
+      },
+    });
 
-    if (query.inline_messageId) {
-      tgURL.searchParams.set('inline_message_id', query.inline_messageId);
-    } else if (query.chatId && query.messageId) {
-      tgURL.searchParams.set('chat_id', String(query.chatId));
-      tgURL.searchParams.set('message_id', String(query.messageId));
-    } else {
-      throw new BadRequestException('Need message identifiers');
-    }
-
-    const resp = await fetch(tgURL.toString()).then(r => r.json());
-    return resp;
+    return topPlayers;
   }
+
 
   private shuffle(arr: string[]) {
     for (let i = arr.length - 1; i > 0; i--) {
@@ -307,12 +317,16 @@ export class GameService {
     return arr;
   }
 
-  async getTgIdUsername(sessionId: string) {
-    const findUs = await this.prisma.game_Session.findFirst({
+  async getBy(sessionId: string) {
+    const session = await this.prisma.game_Session.findUnique({
       where: { id: sessionId },
-      include: { user: true },
+      select: { score: true, level:true, userId: true },
     });
-    if (!findUs) throw new NotFoundException('Session not found');
-    return { telegramId: findUs.user.telegramId, username: findUs.user.username };
+
+    if (!session) {
+      throw new NotFoundException('Session not found');
+    }
+
+    return session;
   }
 }

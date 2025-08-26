@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { GameService } from './game.service';
 import { StartGameDto, SubmitAnswerDto } from './dto/create-game.dto';
 
@@ -26,7 +26,7 @@ export class GameController {
     return this.gameService.submitAnswer(dto);
   }
 
-  @Get('result')
+  @Post('result')
   result(
     @Query('score') score: number,
     @Query('userId') userId: string,
@@ -42,20 +42,15 @@ export class GameController {
       inline_messageId,
     });
   }
-  @Get('highscore')
-  highscore(
   
-    @Query('userId') userId: string,
-    @Query('chatId') chatId?: string,
-    @Query('messageId') messageId?: string,
-    @Query('inline_messageId') inline_messageId?: string,
-  ) {
-    return this.gameService.getHighScores({
-      userId,
-      chatId,
-      messageId,
-      inline_messageId,
-    });
+  @Get('top')
+  getTopPlayers() {
+    return this.gameService.getTopPlayers();
+  }
+
+  @Get('result/:sessionId')
+  async getResult(@Param('sessionId') sessionId: string) {
+    return this.gameService.getBy(sessionId);
   }
 
 
