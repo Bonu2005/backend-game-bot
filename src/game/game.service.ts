@@ -226,43 +226,45 @@ export class GameService {
 
   async getResult(body: {
     score: number;
-    user_id: string;
-    chat_id?: string;
-    message_id?: string;
-    inline_message_id?: string;
+    userId: string;
+    chatId?: string;
+    messageId?: string;
+    inline_messageId?: string;
   }) {
     try {
-      const { score, user_id, chat_id, message_id, inline_message_id } = body;
+      const { score, userId, chatId, messageId, inline_messageId } = body;
 
-      if (typeof score !== 'number' || typeof user_id !== 'number') {
-        throw new BadRequestException('Invalid score or user_id');
+      if (typeof score !== 'number' || typeof userId !== 'string') {
+        throw new BadRequestException('Invalid score or userId');
       }
 
       // если есть чат — сохраняем лучший результат
-      if (chat_id) {
+      if (chatId) {
         const existing = await this.prisma.chatBest.findFirst({
-          where: { chatId: String(chat_id), userId: String(user_id) },
+          where: { chatId: String(chatId), userId: String(userId) },
         });
 
         if (!existing || existing.bestScore < score) {
           await this.prisma.chatBest.upsert({
-            where: { chatId_userId: { chatId: String(chat_id), userId: String(user_id) } },
+            where: { chatId_userId: { chatId: String(chatId), userId: String(userId) } },
             update: { bestScore: score },
-            create: { chatId: String(chat_id), userId: String(user_id), bestScore: score },
+            create: { chatId: String(chatId), userId: String(userId), bestScore: score },
           });
         }
       }
 
       // отправляем результат в Telegram API
       const tgURL = new URL(`https://api.telegram.org/bot8368067329:AAGAUAGj6ZrJ9sQnxvUzeIS2OcFZDmMI7_U/setGameScore`);
-      tgURL.searchParams.set('user_id', String(user_id));
+      tgURL.searchParams.set('user_id', String(userId));
       tgURL.searchParams.set('score', String(score));
 
-      if (inline_message_id) {
-        tgURL.searchParams.set('inline_message_id', inline_message_id);
-      } else if (chat_id && message_id) {
-        tgURL.searchParams.set('chat_id', String(chat_id));
-        tgURL.searchParams.set('message_id', String(message_id));
+
+
+      if (inline_messageId) {
+        tgURL.searchParams.set('inline_message_id', inline_messageId);
+      } else if (chatId && messageId) {
+        tgURL.searchParams.set('chat_id', String(chatId));
+        tgURL.searchParams.set('message_id', String(messageId));
       } else {
         throw new BadRequestException('Need message identifiers');
       }

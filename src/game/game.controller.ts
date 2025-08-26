@@ -29,17 +29,17 @@ export class GameController {
   @Get('result')
   result(
     @Query('score') score: number,
-    @Query('user_id') user_id: string,
-    @Query('chat_id') chat_id?: string,
-    @Query('message_id') message_id?: string,
-    @Query('inline_message_id') inline_message_id?: string,
+    @Query('userId') userId: string,
+    @Query('chatId') chatId?: string,
+    @Query('messageId') messageId?: string,
+    @Query('inline_messageId') inline_messageId?: string,
   ) {
     return this.gameService.getResult({
       score: score,
-      user_id:user_id,
-      chat_id: chat_id ? chat_id : undefined,
-      message_id: message_id ? message_id : undefined,
-      inline_message_id,
+      userId,
+      chatId,
+      messageId,
+      inline_messageId,
     });
   }
 
