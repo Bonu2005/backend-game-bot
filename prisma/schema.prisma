@@ -23,11 +23,8 @@ model Users {
   id         String         @id @default(uuid())
   telegramId String         @unique
   username   String
-
-  // Глобальный личный рекорд игрока (вне чатов) и уровень, где он был установлен
   score      Int            @default(0)
   bestLevel  Int?
-
   sessions   Game_Session[]
   chatBests  ChatBest[]
 }
@@ -36,20 +33,13 @@ model Game_Session {
   id         String    @id @default(uuid())
   userId     String
   user       Users     @relation(fields: [userId], references: [id])
-
-  // Привязка к чату Telegram (личка/группа). null — персональная вне чата/inline.
   chatId     String?
-
   level      Int?
   score      Int       @default(0)
-
   start_time DateTime  @default(now())
   end_time   DateTime?
-
-  // Текущий вопрос для жёсткого серверайд-таймера по 5 сек
   currentWordId   String?
   currentDeadline DateTime?
-
   answers    Answer[]
 }
 
@@ -59,22 +49,18 @@ model Answer {
   session        Game_Session @relation(fields: [sessionId], references: [id])
   wordId         String
   word           Words        @relation(fields: [wordId], references: [id])
-
   selectedOption String
   isCorrect      Boolean
   time_taken     Int
-  deadline       DateTime?    // дедлайн, который был установлен на момент вопроса
+  deadline       DateTime? 
 
   @@unique([sessionId, wordId])
 }
-
-// Лучший результат игрока в конкретном чате (личка/группа)
 model ChatBest {
   id        String   @id @default(uuid())
   chatId    String
   userId    String
   user      Users    @relation(fields: [userId], references: [id])
-
   bestScore Int      @default(0)
   bestLevel Int?
   updatedAt DateTime @updatedAt

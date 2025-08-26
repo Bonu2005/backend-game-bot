@@ -1,16 +1,17 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StartGameDto, SubmitAnswerDto } from './dto/create-game.dto';
+import { error } from 'console';
 
 const MAX_ANSWER_TIME = 5 * 1000; // мс, 5 секунд
 
 @Injectable()
 export class GameService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
-  // ===== START GAME =====
-  async startGame(dto: StartGameDto, chatId?: string) {
-    const { telegramId, username } = dto;
+
+  async startGame(dto: StartGameDto) {
+    const { telegramId, username, chatId } = dto;
 
     let user = await this.prisma.users.findUnique({ where: { telegramId } });
     if (!user) {
@@ -18,12 +19,13 @@ export class GameService {
         data: { telegramId, username, score: 0 },
       });
     } else if (user.username !== username) {
-      // опционально: обновлять ник, если изменился в TG
+
       await this.prisma.users.update({
         where: { id: user.id },
         data: { username },
       });
     }
+    console.log(user);
 
     const session = await this.prisma.game_Session.create({
       data: {
@@ -35,6 +37,7 @@ export class GameService {
         currentWordId: null,
       },
     });
+    console.log(session);
 
     return {
       session_id: session.id,
@@ -47,7 +50,7 @@ export class GameService {
     };
   }
 
-  // ===== CHOOSE LEVEL =====
+
   async chooseLevel(sessionId: string, level: number) {
     const session = await this.prisma.game_Session.findUnique({ where: { id: sessionId } });
     if (!session) throw new NotFoundException('Session not found');
@@ -61,78 +64,83 @@ export class GameService {
     return { message: `Level set to ${level}`, level: updated.level };
   }
 
-  // ===== GET NEXT WORD (рандом без повторов + жёсткий дедлайн на бэке) =====
   async getNextWord(sessionId: string) {
-    const session = await this.prisma.game_Session.findUnique({
-      where: { id: sessionId },
-      include: { answers: true },
-    });
+    try {
+      const session = await this.prisma.game_Session.findUnique({
+        where: { id: sessionId },
+        include: { answers: true },
+      });
+      console.log(sessionId)
+      if (!session) throw new NotFoundException('Session not found');
+      if (!session.level) throw new BadRequestException('Level not selected yet');
 
-    if (!session) throw new NotFoundException('Session not found');
-    if (!session.level) throw new BadRequestException('Level not selected yet');
+      if (session.currentDeadline && new Date() > session.currentDeadline) {
+        console.log("time ended")
+        await this.endGame(sessionId);
+        return { message: 'Time is up. Game ended.' };
+      }
 
-    // если висит просроченный дедлайн — завершаем игру
-    if (session.currentDeadline && new Date() > session.currentDeadline) {
-      await this.endGame(sessionId);
-      return { message: 'Time is up. Game ended.' };
+      const usedWordIds = session.answers.map((a) => a.wordId);
+
+      const words = await this.prisma.words.findMany({
+        where: { level: session.level, id: { notIn: usedWordIds } },
+        select: { id: true, word_en: true, correct_uz: true, wrong_1: true, wrong_2: true, wrong_3: true },
+      });
+      console.log("words", words)
+      if (!words.length) {
+        await this.endGame(sessionId);
+        console.log("no words available")
+        return { message: 'No more words available. Game ended.' };
+      }
+
+      const word = words[Math.floor(Math.random() * words.length)];
+
+      const options = this.shuffle([
+        word.correct_uz,
+        word.wrong_1,
+        word.wrong_2,
+        word.wrong_3,
+      ]);
+      console.log(options)
+      const deadline = new Date(Date.now() + MAX_ANSWER_TIME);
+      console.log(deadline)
+
+      await this.prisma.game_Session.update({
+        where: { id: sessionId },
+        data: {
+          currentWordId: word.id,
+          currentDeadline: deadline,
+        },
+      });
+      console.log(word.id, word.word_en, options)
+      return {
+        word_id: word.id,
+        word_en: word.word_en,
+        options,
+        timeLimitMs: 5000
+      };
+
+    } catch (error) {
+      console.log(error);
+
     }
-
-    const usedWordIds = session.answers.map((a) => a.wordId);
-
-    const words = await this.prisma.words.findMany({
-      where: { level: session.level, id: { notIn: usedWordIds } },
-      select: { id: true, word_en: true, correct_uz: true, wrong_1: true, wrong_2: true, wrong_3: true },
-    });
-
-    if (!words.length) {
-      await this.endGame(sessionId);
-      return { message: 'No more words available. Game ended.' };
-    }
-
-    const word = words[Math.floor(Math.random() * words.length)];
-
-    const options = this.shuffle([
-      word.correct_uz,
-      word.wrong_1,
-      word.wrong_2,
-      word.wrong_3,
-    ]);
-
-    const deadline = new Date(Date.now() + MAX_ANSWER_TIME);
-
-    // запомним текущий вопрос и дедлайн в сессии (сервер контролит таймер)
-    await this.prisma.game_Session.update({
-      where: { id: sessionId },
-      data: {
-        currentWordId: word.id,
-        currentDeadline: deadline,
-      },
-    });
-
-    return {
-      word_id: word.id,
-      word_en: word.word_en,
-      options,
-      deadlineMs: deadline.getTime(), // фронту удобно миллисекунды
-    };
   }
 
-  // ===== SUBMIT ANSWER =====
   async submitAnswer(dto: SubmitAnswerDto) {
     const { session_id, word_id, selected, time_taken } = dto;
-
+    console.log("dto", dto)
     const session = await this.prisma.game_Session.findUnique({
       where: { id: session_id },
       include: { user: true },
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    // проверяем, что отвечают на текущий вопрос
+
     if (!session.currentWordId || session.currentWordId !== word_id) {
       throw new ForbiddenException('This question is not active or already answered.');
     }
 
-    // проверяем дедлайн
+
     const now = new Date();
     if (!session.currentDeadline || now > session.currentDeadline) {
       await this.endGame(session_id);
@@ -144,7 +152,7 @@ export class GameService {
 
     const isCorrect = selected === word.correct_uz;
 
-    // фиксируем ответ
+
     await this.prisma.answer.create({
       data: {
         sessionId: session_id,
@@ -156,7 +164,7 @@ export class GameService {
       },
     });
 
-    // инкремент очков за правильный ответ
+
     if (isCorrect) {
       await this.prisma.game_Session.update({
         where: { id: session_id },
@@ -164,7 +172,7 @@ export class GameService {
       });
     }
 
-    // очистим "текущий вопрос" — следующий вызов getNextWord поставит новый дедлайн
+
     await this.prisma.game_Session.update({
       where: { id: session_id },
       data: { currentWordId: null, currentDeadline: null },
@@ -173,7 +181,7 @@ export class GameService {
     return { isCorrect };
   }
 
-  // ===== END GAME =====
+
   private async endGame(sessionId: string) {
     const session = await this.prisma.game_Session.findUnique({
       where: { id: sessionId },
@@ -185,8 +193,8 @@ export class GameService {
       where: { id: sessionId },
       data: { end_time: new Date(), currentWordId: null, currentDeadline: null },
     });
+    console.log(updated)
 
-    // Глобальный личный рекорд игрока (вне чатов) — обновляем только если улучшил
     if (updated.score > (session.user.score ?? 0)) {
       await this.prisma.users.update({
         where: { id: session.userId },
@@ -194,7 +202,7 @@ export class GameService {
       });
     }
 
-    // Рекорд в конкретном чате (личка/группа)
+
     if (session.chatId) {
       const existing = await this.prisma.chatBest.findUnique({
         where: { chatId_userId: { chatId: session.chatId, userId: session.userId } },
@@ -215,67 +223,59 @@ export class GameService {
     }
   }
 
-  // ===== GET RESULT (по сессии) =====
-  async getResult(sessionId: string) {
-    const session = await this.prisma.game_Session.findUnique({
-      where: { id: sessionId },
-      include: { answers: true, user: true },
-    });
 
-    if (!session) throw new NotFoundException('Session not found');
+  async getResult(body: {
+    score: number;
+    user_id: number;
+    chat_id?: number;
+    message_id?: number;
+    inline_message_id?: string;
+  }) {
+    try {
+      const { score, user_id, chat_id, message_id, inline_message_id } = body;
 
-    return {
-      username: session.user.username,
-      level: session.level,
-      total_score: session.score,
-      total_answers: session.answers.length,
-      ended_at: session.end_time,
-      chatId: session.chatId,
-    };
+      if (typeof score !== 'number' || typeof user_id !== 'number') {
+        throw new BadRequestException('Invalid score or user_id');
+      }
+
+      // если есть чат — сохраняем лучший результат
+      if (chat_id) {
+        const existing = await this.prisma.chatBest.findFirst({
+          where: { chatId: String(chat_id), userId: String(user_id) },
+        });
+
+        if (!existing || existing.bestScore < score) {
+          await this.prisma.chatBest.upsert({
+            where: { chatId_userId: { chatId: String(chat_id), userId: String(user_id) } },
+            update: { bestScore: score },
+            create: { chatId: String(chat_id), userId: String(user_id), bestScore: score },
+          });
+        }
+      }
+
+      // отправляем результат в Telegram API
+      const tgURL = new URL(`https://api.telegram.org/bot8368067329:AAGAUAGj6ZrJ9sQnxvUzeIS2OcFZDmMI7_U/setGameScore`);
+      tgURL.searchParams.set('user_id', String(user_id));
+      tgURL.searchParams.set('score', String(score));
+
+      if (inline_message_id) {
+        tgURL.searchParams.set('inline_message_id', inline_message_id);
+      } else if (chat_id && message_id) {
+        tgURL.searchParams.set('chat_id', String(chat_id));
+        tgURL.searchParams.set('message_id', String(message_id));
+      } else {
+        throw new BadRequestException('Need message identifiers');
+      }
+
+      const tgResp = await fetch(tgURL.toString()).then((r) => r.json());
+      return { ok: true, tg: tgResp };
+    } catch (e) {
+      console.error(e);
+      throw new BadRequestException('Server error');
+    }
   }
 
-  // ===== LEADERBOARD =====
-  // Без параметров — глобальный (по Users.score)
-  async getGlobalLeaderboard() {
-    const users = await this.prisma.users.findMany({
-      orderBy: { score: 'desc' },
-      select: { username: true, score: true, bestLevel: true },
-    });
 
-    return users.map((u, index) => {
-      let league = 'Bronze';
-      if (index < 3) league = 'Gold';
-      else if (index < 10) league = 'Silver';
-
-      return {
-        place: index + 1,
-        username: u.username,
-        score: u.score,
-        bestLevel: u.bestLevel,
-        league,
-      };
-    });
-  }
-
-  // По чату — из ChatBest
-  async getChatLeaderboard(chatId: string) {
-    if (!chatId) throw new BadRequestException('chatId is required');
-
-    const rows = await this.prisma.chatBest.findMany({
-      where: { chatId },
-      include: { user: { select: { username: true } } },
-      orderBy: { bestScore: 'desc' },
-    });
-
-    return rows.map((r, index) => ({
-      place: index + 1,
-      username: r.user.username,
-      score: r.bestScore,
-      bestLevel: r.bestLevel,
-    }));
-  }
-
-  // ===== Вспомогалка =====
   private shuffle(arr: string[]) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -284,7 +284,6 @@ export class GameService {
     return arr;
   }
 
-  // опционально: для дебага/админки
   async getTgIdUsername(sessionId: string) {
     const findUs = await this.prisma.game_Session.findFirst({
       where: { id: sessionId },

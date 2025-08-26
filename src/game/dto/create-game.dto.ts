@@ -2,6 +2,7 @@
 export class StartGameDto {
   telegramId!: string; // ты уже перевёл на string в схеме
   username!: string;
+  chatId?: string
 }
 
 export class SubmitAnswerDto {
